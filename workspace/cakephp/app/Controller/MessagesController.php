@@ -5,7 +5,6 @@ App::uses('AppController', 'Controller');
  */
 class MessagesController extends AppController
 {
-
 	/**
 	 * Scaffold
 	 *
@@ -13,6 +12,12 @@ class MessagesController extends AppController
 	 */
 	public $scaffold;
 	public $uses = ['User', 'Message'];
+
+	public function generateConversationId($senderId, $receiverId)
+	{
+		// Create a unique string by concatenating the IDs
+		return md5(min($senderId, $receiverId) . max($senderId, $receiverId));
+	}
 
 	public function inbox()
 	{
@@ -100,15 +105,6 @@ class MessagesController extends AppController
 	}
 
 
-
-
-
-	public function generateConversationId($senderId, $receiverId)
-	{
-		// Create a unique string by concatenating the IDs
-		return md5(min($senderId, $receiverId) . max($senderId, $receiverId));
-	}
-
 	public function send_message()
 	{
 		if ($this->request->is('ajax')) {
@@ -170,8 +166,6 @@ class MessagesController extends AppController
 		if ($this->request->is('ajax')) {
 			$this->Message->create();
 			$senderId = AuthComponent::user('id');
-
-			// Initialize receiverId and conversationId
 			$receiverId = null;
 			$conversationId = isset($this->request->data['User']['conversationId']) ? $this->request->data['User']['conversationId'] : null;
 
@@ -184,7 +178,7 @@ class MessagesController extends AppController
 				if (!empty($existingMessage)) {
 					$receiverId = $existingMessage['Message']['senderId'] === $senderId ? $existingMessage['Message']['receiverId'] : $existingMessage['Message']['senderId'];
 				} else {
-					$receiverId = $this->request->data['User']['user_id']; // Fallback to user_id
+					$receiverId = $this->request->data['User']['user_id'];
 				}
 			} else {
 				// New conversation
@@ -203,34 +197,15 @@ class MessagesController extends AppController
 				]
 			];
 
-			// AJAX handling for saving the message
 			if ($this->Message->save($data)) {
-				// Build the message HTML directly in the controller
-				$messageHtml = '';
-
-				if ($senderId === AuthComponent::user('id')) {
-					// User's own message (aligned to the right)
-					$messageHtml .= '<div class="text-end">';
-					$messageHtml .= '<div class="alert alert-primary float-end">';
-					$messageHtml .= '<strong>' . h(AuthComponent::user('name')) . '</strong>';
-					$messageHtml .= '<p>' . h($data['Message']['body']) . '</p>';
-					$messageHtml .= '<small class="text-muted">' . date('Y-m-d H:i:s') . '</small>';
-					$messageHtml .= '</div></div>';
-				} else {
-					// Other user's message (aligned to the left)
-					$messageHtml .= '<div class="text-start">';
-					$messageHtml .= '<div class="alert alert-secondary">';
-					$messageHtml .= '<strong>' . h($data['Sender']['name']) . '</strong>'; // Modify to get other user's name
-					$messageHtml .= '<p>' . h($data['Message']['body']) . '</p>';
-					$messageHtml .= '<small class="text-muted">' . date('Y-m-d H:i:s') . '</small>';
-					$messageHtml .= '</div></div>';
-				}
-
-				// Return JSON with the new message HTML
+				// Return only the necessary data as JSON
 				echo json_encode([
 					'success' => true,
-					'html' => $messageHtml,
-					'message' => "Message sent!"
+					'senderId' => $senderId,
+					'receiverId' => $receiverId,
+					'body' => $data['Message']['body'],
+					'createdAt' => date('Y-m-d H:i:s'),
+					'senderName' => AuthComponent::user('name') // Return the current user's name
 				]);
 			} else {
 				$errors = $this->Message->validationErrors;
@@ -241,8 +216,6 @@ class MessagesController extends AppController
 			}
 		}
 	}
-
-
 
 
 	public function view_conversation($conversationId, $offset = 0)
@@ -271,14 +244,21 @@ class MessagesController extends AppController
 				? $firstMessage['Message']['receiverId']
 				: $firstMessage['Message']['senderId'];
 
-			// Pass the conversationId, receiverId, messages, and totalMessages to the view
-			$this->set(compact('conversationId', 'receiverId', 'messages', 'totalMessages'));
+			// Fetch the other user's details
+			$otherUser = $this->User->findById($receiverId);
+			$otherUserName = !empty($otherUser) ? $otherUser['User']['name'] : 'Unknown User';
+			$otherUserProfilePic = !empty($otherUser) ? $otherUser['User']['profilePic'] : 'default_profile_pic.jpg'; // Use a default picture if not set
+
+			// Pass the conversationId, receiverId, messages, totalMessages, otherUserName, and otherUserProfilePic to the view
+			$this->set(compact('conversationId', 'receiverId', 'messages', 'totalMessages', 'otherUserName', 'otherUserProfilePic'));
 		} else {
 			// Handle case where there are no messages
 			$this->Flash->error(__('No messages found for this conversation.'));
 			return $this->redirect(['action' => 'inbox']); // Redirect to an appropriate action
 		}
 	}
+
+
 
 	public function loadMoreMessages($conversationId, $offset)
 	{
@@ -288,7 +268,7 @@ class MessagesController extends AppController
 		// Fetch all messages for the given conversationId with limit and offset
 		$messages = $this->Message->find('all', [
 			'conditions' => ['Message.conversationId' => $conversationId],
-			'contain' => ['Users'], // Ensure user data is loaded
+			'contain' => ['Sender'], // Ensure user data is loaded
 			'order' => ['Message.createdAt' => 'DESC'], // Order by creation time
 			'limit' => $limit,
 			'offset' => $offset
@@ -297,24 +277,16 @@ class MessagesController extends AppController
 		// Check if there are more messages to load
 		$noMoreMessages = count($messages) < $limit;
 
-		// Prepare HTML output
-		$html = '';
+		// Prepare response data
+		$responseMessages = [];
 		if (!empty($messages)) {
 			foreach ($messages as $message) {
-				// Build HTML regardless of the sender
-				$isUserMessage = $message['Message']['senderId'] === $this->Auth->user('id');
-				$messageClass = $isUserMessage ? 'alert-primary' : 'alert-secondary';
-				$textAlignment = $isUserMessage ? 'text-end' : 'text-start';
-
-				$html .= '<div class="message-card mb-2">
-                        <div class="message-sender ' . $textAlignment . '">
-                            <div class="alert ' . $messageClass . '">
-                                <strong>' . h($message['Sender']['name']) . '</strong>
-                                <p>' . h($message['Message']['body']) . '</p>
-                                <small class="text-muted">' . h($message['Message']['createdAt']) . '</small>
-                            </div>
-                        </div>
-                      </div>';
+				$responseMessages[] = [
+					'senderId' => $message['Sender']['id'],
+					'senderName' => h($message['Sender']['name']),
+					'body' => h($message['Message']['body']),
+					'createdAt' => h($message['Message']['createdAt']),
+				];
 			}
 		}
 
@@ -323,7 +295,7 @@ class MessagesController extends AppController
 			$this->response->type('application/json'); // Set content type to JSON
 			$response = [
 				'success' => true,
-				'html' => $html,
+				'messages' => $responseMessages,
 				'noMoreMessages' => $noMoreMessages,
 			];
 			$this->response->body(json_encode($response)); // Set the response body
@@ -334,10 +306,9 @@ class MessagesController extends AppController
 		}
 	}
 
+
 	public function searchMessages($conversationId = null)
 	{
-
-
 		$this->autoRender = false; // Prevent view rendering
 		$searchQuery = $this->request->query('body'); // Get search term from query string
 
@@ -351,51 +322,28 @@ class MessagesController extends AppController
 			'order' => ['Message.createdAt' => 'DESC']
 		]);
 
-		// Prepare HTML output
-		$html = '';
 		if (!empty($messages)) {
+			// Prepare JSON response with message data
+			$data = [];
 			foreach ($messages as $message) {
-				if ($message['Message']['senderId'] === $this->Auth->user('id')) {
-					// User's own message
-					$html .= '<div class="message-card mb-2" data-body="' . h($message['Message']['body']) . '">
-						<div class="message-sender text-end">
-							<div class="alert alert-primary float-end">
-								<strong>' . h($message['Sender']['name']) . '</strong>
-								<p>' . h($message['Message']['body']) . '</p>
-								<small class="text-muted">' . h($message['Message']['createdAt']) . '</small>
-							</div>
-						</div>
-					</div>';
-				} else {
-					// Other user's message
-					$html .= '<div class="message-card mb-2" data-body="' . h($message['Message']['body']) . '">
-						<div class="message-sender text-start">
-							<div class="alert alert-secondary">
-								<strong>' . h($message['Sender']['name']) . '</strong>
-								<p>' . h($message['Message']['body']) . '</p>
-								<small class="text-muted">' . h($message['Message']['createdAt']) . '</small>
-							</div>
-						</div>
-					</div>';
-				}
+				$data[] = [
+					'senderId' => $message['Message']['senderId'],
+					'senderName' => $message['Sender']['name'],
+					'body' => $message['Message']['body'],
+					'createdAt' => $message['Message']['createdAt']
+				];
 			}
-		} else {
-			$html = '<div>No messages found.</div>'; // No messages found message
-		}
 
-		// Return JSON response
-		if ($this->request->is('ajax')) {
-
-			$response = [
+			echo json_encode([
 				'success' => true,
-				'html' => $html,
-			];
-
-			$this->response->body(json_encode($response)); // Set the response body
-			return $this->response; // Return the response
+				'messages' => $data
+			]);
 		} else {
-			// If not an AJAX request, redirect or handle accordingly
-			return $this->redirect(['action' => 'index']);
+			echo json_encode([
+				'success' => false,
+				'messages' => [],
+				'message' => 'No messages found.'
+			]);
 		}
 	}
 
@@ -407,24 +355,34 @@ class MessagesController extends AppController
 		if ($this->request->is('ajax')) {
 			$id = $this->request->data('id'); // Get the ID from POST data
 
-			// Fetch the message to check if it exists and belongs to the user
+			// Fetch the message to check if it exists
 			$message = $this->Message->findById($id);
-			if ($message && $message['Message']['senderId'] === $this->Auth->user('id')) {
-				// Attempt to delete the message
-				if ($this->Message->delete($id)) {
-					// Set the response type to JSON
-					$this->response->type('json');
-					// Return success response
-					$this->response->body(json_encode(['success' => true, 'message' => 'Message deleted successfully.']));
+
+			// Check if the message exists and if the user is either the sender or the recipient
+			if ($message) {
+				$currentUserId = $this->Auth->user('id');
+				// Assuming the recipient ID is stored in the message model
+				if ($message['Message']['senderId'] === $currentUserId || $message['Message']['receiverId'] === $currentUserId) {
+					// Attempt to delete the message
+					if ($this->Message->delete($id)) {
+						// Set the response type to JSON
+						$this->response->type('json');
+						// Return success response
+						$this->response->body(json_encode(['success' => true, 'message' => 'Message deleted successfully.']));
+					} else {
+						// Handle deletion failure
+						$this->response->type('json');
+						$this->response->body(json_encode(['success' => false, 'error' => 'Could not delete the message.']));
+					}
 				} else {
-					// Handle deletion failure
+					// Handle unauthorized deletion
 					$this->response->type('json');
-					$this->response->body(json_encode(['success' => false, 'error' => 'Could not delete the message.']));
+					$this->response->body(json_encode(['success' => false, 'error' => 'You are not authorized to delete this message.']));
 				}
 			} else {
-				// Handle unauthorized or non-existent message
+				// Handle non-existent message
 				$this->response->type('json');
-				$this->response->body(json_encode(['success' => false, 'error' => 'Message not found or unauthorized.']));
+				$this->response->body(json_encode(['success' => false, 'error' => 'Message not found.']));
 			}
 		} else {
 			// Handle non-AJAX request (optional)
@@ -432,7 +390,6 @@ class MessagesController extends AppController
 			return $this->redirect(['action' => 'index']);
 		}
 	}
-
 
 
 	public function deleteConversation($conversation = null) {}

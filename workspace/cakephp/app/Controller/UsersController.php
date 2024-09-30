@@ -37,12 +37,21 @@ class UsersController extends AppController
 				$userId = $this->Auth->user('id');
 				if ($userId) {
 					$this->User->id = $userId;
-					$this->User->saveField('last_login_time', date('Y-m-d H:i:s'));
+
+					// Try to save the lastLogin field
+					if (!$this->User->saveField('lastLogin', date('Y-m-d H:i:s'))) {
+						$response = [
+							'success' => false,
+							'message' => 'Could not update last login time.',
+							'errors' => $this->User->validationErrors
+						];
+					} else {
+						$response = [
+							'success' => true,
+							'message' => 'Account logged in successfully!',
+						];
+					}
 				}
-				$response = [
-					'success' => true,
-					'message' => 'Account logged in successfully!',
-				];
 			} else {
 				$response = [
 					'success' => false,

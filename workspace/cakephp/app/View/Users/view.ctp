@@ -6,6 +6,14 @@
 			<?php echo h($user['User']['id']); ?>
 			&nbsp;
 		</dd>
+		<dt><?php echo __('Profile Picture'); ?></dt>
+		<dd>
+			<?php
+			$profilePic = h($user['User']['profilePic']);
+
+			echo $this->Html->image($profilePic, ['alt' => 'Profile Picture', 'class' => 'profile-pic',]); ?>
+			&nbsp;
+		</dd>
 		<dt><?php echo __('Name'); ?></dt>
 		<dd>
 			<?php echo h($user['User']['name']); ?>
@@ -16,11 +24,6 @@
 			<?php echo h($user['User']['email']); ?>
 			&nbsp;
 		</dd>
-		<dt><?php echo __('Password'); ?></dt>
-		<dd>
-			<?php echo h($user['User']['password']); ?>
-			&nbsp;
-		</dd>
 		<dt><?php echo __('Gender'); ?></dt>
 		<dd>
 			<?php echo h($user['User']['gender']); ?>
@@ -28,7 +31,9 @@
 		</dd>
 		<dt><?php echo __('BirthDate'); ?></dt>
 		<dd>
-			<?php echo h($user['User']['birthDate']); ?>
+			<?php $birthDate = $user['User']['birthDate'];
+			$formattedDate = date('m-d-Y', strtotime($birthDate));
+			echo h($formattedDate); ?>
 			&nbsp;
 		</dd>
 		<dt><?php echo __('Hobby'); ?></dt>
@@ -36,14 +41,11 @@
 			<?php echo h($user['User']['hobby']); ?>
 			&nbsp;
 		</dd>
-		<dt><?php echo __('ProfilePic'); ?></dt>
-		<dd>
-			<?php echo h($user['User']['profilePic']); ?>
-			&nbsp;
-		</dd>
 		<dt><?php echo __('User Since'); ?></dt>
 		<dd>
-			<?php echo h($user['User']['createdAt']); ?>
+			<?php $birthDate = $user['User']['createdAt'];
+			$formattedDate = date('m-d-Y', strtotime($birthDate));
+			echo h($formattedDate); ?>
 			&nbsp;
 		</dd>
 		<dt><?php echo __('LastLogin'); ?></dt>
@@ -62,3 +64,16 @@
 		<li><?php echo $this->Html->link(__('New User'), array('action' => 'add')); ?> </li>
 	</ul>
 </div>
+
+<style>
+	.profile-pic {
+		width: 50px;
+		height: 50px;
+		object-fit: cover;
+		border: 2px solid #007bff;
+		border-radius: 50%;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+		transition: transform 0.2s;
+
+	}
+</style>
