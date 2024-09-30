@@ -1,11 +1,7 @@
-<!-- Conversation Page -->
-
-
 <div class="container">
 	<h2>Open Conversation</h2>
-	<!-- Display the other user's name -->
-	<div class="mb-2">
 
+	<div class="mb-2">
 		<strong>
 			<span>Chatting with </span>
 			<?php echo $this->Html->link(h($otherUserName), [
@@ -20,7 +16,7 @@
 			'class' => 'form-control',
 			'rows' => '1',
 			'name' => 'body',
-			'id' => 'searchMessage', // Added an ID for the search box
+			'id' => 'searchMessage',
 			'placeholder' => 'Search in conversation'
 		]); ?>
 	</div>
@@ -40,7 +36,7 @@
 			<?php foreach ($messages as $message): ?>
 				<div class="message-card mb-2">
 					<?php
-					// Ensure the comparison is consistent
+
 					$currentUserId = AuthComponent::user('id');
 					$messageBody = h($message['Message']['body']);
 					if ($message['Sender']['id'] == $currentUserId): ?>
@@ -88,20 +84,13 @@
 		<?php endif; ?>
 	</div>
 
-	<!-- Load More Messages Button -->
+
 	<?php if ($totalMessages > 5): ?>
 		<button id="loadMore" class="btn btn-secondary" data-offset="5">
 			Load More Messages
 		</button>
 	<?php endif; ?>
 </div>
-<script>
-	$(document).ready(function() {
-
-
-
-	});
-</script>
 
 <script>
 	$(document).ready(function() {
@@ -255,7 +244,6 @@
 				}
 			});
 		});
-
 		//read more event
 		$(document).on('click', '.read-more', function() {
 			var messageText = $(this).siblings('.message-text'); // Get the message text element
@@ -299,7 +287,6 @@
 				});
 			}
 		});
-
 
 	});
 </script>
